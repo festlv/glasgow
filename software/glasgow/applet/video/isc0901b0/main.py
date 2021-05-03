@@ -3,7 +3,7 @@ from nmigen.build import Platform
 from nmigen.lib.fifo import AsyncFIFO, SyncFIFO, FIFOInterface
 from glasgow.applet.video.isc0901b0.cmd import ISC0901B0CommandModule, ISC0901B0BiasModule
 from glasgow.applet.video.isc0901b0.pwr_seq import ISC0901B0PowerSequencing
-from glasgow.applet.video.isc0901b0.acq import ISC0901B0AcqModule, ISC0901B0SHRAcq
+from glasgow.applet.video.isc0901b0.acq import ISC0901B0SHRAcq
 
 
 class ISC0901B0Main(Elaboratable):
@@ -16,7 +16,8 @@ class ISC0901B0Main(Elaboratable):
         self.pads = pads
         self.sensor_clk_freq = sensor_clk_freq
         self.data_out_fifo = data_out_fifo
-        cmd_words_val = [0xff, 0x38a2, 0x36a7, 0x26aa, 0x30b7, 0x3f63, 0x04ff, 0x2212, 0x1cc4, 0x0b8d, 0x3018, 0x1020]
+        cmd_words_val = [0xff, 0x38a2, 0x36a7, 0x26aa, 0x30b7, 0x3f63, 0x04ff, 0x2212, 0x1cc4, 0x0b8d, 0x3018, 0x1020] # autoliv capture by me
+        #cmd_words_val = [255, 12743, 14127, 1706, 2231, 13378, 1081, 8209, 6340, 723, 12312, 4096] # flir e4 by ovgn
         self.cmd_words = Array([Const(v, unsigned(14)) for v in cmd_words_val])
         self.init_ctr = Signal(range(32), reset=0)
         self.cmd_word_ctr = Signal(range(len(self.cmd_words)))
@@ -57,19 +58,11 @@ class ISC0901B0Main(Elaboratable):
             self.cmd.ena.eq(self.pwr_seq.en_2v5),
         ]
         if self.pads:
-            for i in range(8):
-                m.d.comb += getattr(self.pads, "d%d_t" % i).oe.eq(1)
-                m.d.comb += getattr(self.pads, "d%d_t" % i).o.eq(self.acq.input_word_rev[i])
-
             a0 = platform.request("aux", 0, dir="o")
             a1 = platform.request("aux", 1, dir="o")
             m.d.comb += [
-                a0.eq(self.data_out_fifo.w_en),
                 a1.eq(self.acq.latch)
             ]
-
-        if platform is None:
-            m.submodules.data_out_fifo = self.data_out_fifo
 
         line_start_offs = 2285
         with m.FSM("POWERUP"):

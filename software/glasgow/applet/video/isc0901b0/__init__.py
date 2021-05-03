@@ -7,20 +7,7 @@ from nmigen.build import Platform
 from ....gateware.pads import *
 from ....gateware.pll import *
 from ... import *
-from .main import ISC0901B0Main
-
-
-class ISC0901B0Subtarget(Elaboratable):
-    def __init__(self, pads, in_fifo):
-        self.pads = pads
-        self.in_fifo = in_fifo
-
-    def elaborate(self, platform: Platform) -> Module:
-        m = Module()
-
-        m.submodules.main = ISC0901B0Main(self.pads, self.in_fifo, platform.default_clk_frequency)
-
-        return m
+from .top import ISC0901B0Subtarget
 
 
 class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
@@ -30,7 +17,7 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
     
     """
 
-    __pins = ("ena", "clk", "cmd", "bias", "data_even", "data_odd", "en_3v3", "en_2v5",
+    __pins = ("ena", "clk", "cmd", "bias", "data_odd", "data_even", "en_3v3", "en_2v5",
               "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7")
 
     @classmethod
@@ -52,12 +39,28 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
         iface = await device.demultiplexer.claim_interface(self, self.mux_interface, args, pull_low=
             set([i for i in range(len(self.__pins))]))
 
-        w = 339
-        h = 262
-        num_frames = 50
-        data = (await iface.read(w * h * num_frames))
-        await iface.reset()
+        got_frame = False
+        num_tries = 10
+        w = 364
+        h = 266
+        num_frames = 5
+        for i in range(num_tries):
+            data = (await iface.read(w * h * num_frames * 2))
+            if data[0] == 0x55 and data[1] == 0x15:
+                got_frame = True
+            else:
+                print("resetting")
+                await iface.reset()
 
+        if not got_frame:
+            print("failed")
+            return
+
+        import numpy as np
+        import matplotlib.pyplot as plt
+        img = np.ndarray(shape=(h, w), dtype="<u2", buffer=data)
+        #plt.imshow(img)
+        #plt.show(True)
         data_ctr = 0
         f = open("frame.bin", "wb")
         f.write(data)
@@ -66,7 +69,7 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
         for frame in range(num_frames):
             txt = ""
             for i in range(16):
-                txt += "%02X, " % data[i + frame * w * h]
+                txt += "%02X, " % data[i + frame * w * h * 2]
             print(txt)
         #while i < (len(data) // 2):
         #    if i % 8 == 0:
@@ -83,6 +86,5 @@ class ISC0901B0TestCase(GlasgowAppletTestCase, applet=ISC0901B0InputApplet):
     @synthesis_test
     def test_build(self):
         self.assertBuilds(args=["--port", "AB"])
-
 
 
