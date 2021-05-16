@@ -39,46 +39,38 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
         iface = await device.demultiplexer.claim_interface(self, self.mux_interface, args, pull_low=
             set([i for i in range(len(self.__pins))]))
 
-        got_frame = False
-        num_tries = 10
-        w = 364
-        h = 266
-        num_frames = 5
-        for i in range(num_tries):
-            data = (await iface.read(w * h * num_frames * 2))
-            if data[0] == 0x55 and data[1] == 0x15:
-                got_frame = True
-            else:
-                print("resetting")
-                await iface.reset()
-
-        if not got_frame:
-            print("failed")
-            return
-
-        import numpy as np
-        import matplotlib.pyplot as plt
-        img = np.ndarray(shape=(h, w), dtype="<u2", buffer=data)
-        #plt.imshow(img)
-        #plt.show(True)
-        data_ctr = 0
+        w = 338
+        h = 259
+        num_frames = 60
+        data = (await iface.read(w * h * num_frames * 2))
         f = open("frame.bin", "wb")
         f.write(data)
-
-        i = 0
+        f.close()
         for frame in range(num_frames):
             txt = ""
             for i in range(16):
                 txt += "%02X, " % data[i + frame * w * h * 2]
             print(txt)
-        #while i < (len(data) // 2):
-        #    if i % 8 == 0:
-        #        txt += "\n%06X: " % data_ctr
-        #    w = data[i*2+1] << 8 | data[i*2]
-        #    txt += "%04x " % w
-        #    i += 1
-        #    data_ctr += 1
-        f.close()
+
+        import numpy as np
+        import matplotlib.pyplot as plt
+        frames = np.ndarray(shape=(num_frames, h, w), dtype="<u2", buffer=data)[:, 3:, 2:]
+        img = frames[-1]
+
+        bp_where = np.where(abs(img - np.mean(img)) > 5 * np.std(img))
+        print("bad pixels: %d" % len(bp_where[0]))
+        img = img.copy()
+        img[bp_where] = np.mean(img)
+
+        print("min: %d, max: %d, mean: %.0f, std: %.3f" % (np.min(img), np.max(img), np.mean(img), np.std(img)))
+
+        fig, ax = plt.subplots(1, 2, tight_layout=True)
+        ax[0].imshow(img)
+        ax[1].hist(img.flatten(), bins="auto")
+
+        plt.show(True)
+
+
 
 # -------------------------------------------------------------------------------------------------
 

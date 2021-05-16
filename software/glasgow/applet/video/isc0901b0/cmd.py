@@ -26,7 +26,7 @@ class ISC0901B0SOModule(Elaboratable):
         m = Module()
         m.submodules.fifo = self.fifo
 
-        m.d.comb += self.out.eq(self.out_word[0])
+        m.d.comb += self.out.eq(self.out_word[self.fifo.width - 1])
         m.d.comb += self.out_clk.eq(self.clk)
         m.d.comb += self.done.eq(~(self.fifo.r_rdy | self.have_word))
         with m.If(~self.have_word):
@@ -43,7 +43,7 @@ class ISC0901B0SOModule(Elaboratable):
         with m.Else():
             m.d.comb += self.fifo.r_en.eq(0)
 
-            m.d.sync += self.out_word.eq(self.out_word.shift_right(1))
+            m.d.sync += self.out_word.eq(self.out_word.shift_left(1))
             m.d.sync += self.bit_ctr.eq(self.bit_ctr + 1)
             with m.If(self.bit_ctr == self.fifo.width):
                 m.d.comb += self.fifo.r_en.eq(1)
@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     from nmigen.sim import *
     from nmigen.lib.fifo import SyncFIFO
-    fifo = SyncFIFO(width=14, depth=16)
+    fifo = SyncFIFO(width=8, depth=16)
     dut = ISC0901B0CommandModule(pads=None, fifo=fifo)
     sim = Simulator(dut)
     def proc():
@@ -122,10 +122,14 @@ if __name__ == "__main__":
             yield
             yield dut.fifo.w_en.eq(0)
 
-        yield from w(42)
-        for i in range(32):
+        data = [0x3f, 0xc0, 0x68, 0xfd, 0xd5, 0x35, 0x56]
+        for b in data:
+            yield from w(b)
+
+        for i in range(64):
             yield Tick()
 
+        return
         yield Tick()
         yield from w(0x3ffe)
         yield from w(0x3ffe)

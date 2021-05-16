@@ -16,9 +16,18 @@ class ISC0901B0Main(Elaboratable):
         self.pads = pads
         self.sensor_clk_freq = sensor_clk_freq
         self.data_out_fifo = data_out_fifo
-        cmd_words_val = [0xff, 0x38a2, 0x36a7, 0x26aa, 0x30b7, 0x3f63, 0x04ff, 0x2212, 0x1cc4, 0x0b8d, 0x3018, 0x1020] # autoliv capture by me
+
+        preamble = [0x3f, 0xc0]
+        cmd_flash = [0x00, 0x80, 0x60, 0x30, 0xb1, 0xd0, 0x49, 0x0d, 0x84, 0x84, 0x3e, 0x70,  0x44, 0x42, 0x56, 0x3b, 0xd7, 0x35, 0xfc, 0xff]
+        cmd_words_val = preamble
+        for i in range(0, len(cmd_flash), 2):
+            idx = len(cmd_flash) - i - 2
+            cmd_words_val.append(cmd_flash[idx])
+            cmd_words_val.append(cmd_flash[idx + 1])
+        #cmd_words_val = [0x3f, 0xC0, 0x00, 0x80, 0x60, 0x30, 0xb1, 0xd0, 0x49, 0x0d, 0x84, 0x84, 0x3e, 0x70,  0x44, 0x42, 0x56, 0x3b, 0xd7, 0x35, 0xfc, 0xff] # 8-bit values from my flash by OVGN
+        #cmd_words_val = [0xff, 0x38a2, 0x36a7, 0x26aa, 0x30b7, 0x3f63, 0x04ff, 0x2212, 0x1cc4, 0x0b8d, 0x3018, 0x1020] # autoliv capture by me
         #cmd_words_val = [255, 12743, 14127, 1706, 2231, 13378, 1081, 8209, 6340, 723, 12312, 4096] # flir e4 by ovgn
-        self.cmd_words = Array([Const(v, unsigned(14)) for v in cmd_words_val])
+        self.cmd_words = Array([Const(v, unsigned(8)) for v in cmd_words_val])
         self.init_ctr = Signal(range(32), reset=0)
         self.cmd_word_ctr = Signal(range(len(self.cmd_words)))
 
@@ -36,15 +45,15 @@ class ISC0901B0Main(Elaboratable):
         self.frame_valid = Signal()
         self.row_ctr = Signal(range(256+32), reset=0)
 
-        self.bias_value = 0x25
-        self.bias_to_latch_cyc = 4
-
+        self.bias_value = 0x35
+#        self.bias_to_latch_cyc = 3  # simultaneously with latch
+        self.bias_to_latch_cyc = 2
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
         m.submodules.pwr_seq = self.pwr_seq = ISC0901B0PowerSequencing(pads=self.pads,
                                                                        clk_freq=self.sensor_clk_freq)
-        cmd_fifo = SyncFIFO(width=14, depth=len(self.cmd_words))
+        cmd_fifo = SyncFIFO(width=8, depth=len(self.cmd_words))
         m.submodules.cmd = self.cmd = ISC0901B0CommandModule(self.pads, cmd_fifo)
 
         bias_fifo = SyncFIFO(width=7, depth=16)
@@ -64,7 +73,7 @@ class ISC0901B0Main(Elaboratable):
                 a1.eq(self.acq.latch)
             ]
 
-        line_start_offs = 2285
+        line_start_offs = 2292 + 16
         with m.FSM("POWERUP"):
             with m.State("POWERUP"):
                 with m.If(self.pwr_seq.ready):
@@ -110,7 +119,7 @@ class ISC0901B0Main(Elaboratable):
                         self.line_start_ctr.eq(self.line_start_ctr + 1),
                         self.line_clk_ctr.eq(0)
                     ]
-                cmd_to_line_start_cyc = 668 * 7 + 1
+                cmd_to_line_start_cyc = 671 * 7 - 4
                 with m.If(self.line_start_ctr >= cmd_to_line_start_cyc):
                     m.next = "READ-LINE"
                     m.d.sync += [
@@ -128,12 +137,12 @@ class ISC0901B0Main(Elaboratable):
                 m.d.sync += [
                     self.line_clk_ctr.eq(self.line_clk_ctr + 1),
                 ]
-                with m.If(self.line_clk_ctr == 339 * 7):
+                with m.If(self.line_clk_ctr == 338 * 7):
                     m.d.sync += [
                         self.line_start_ctr.eq(0),
                         self.row_ctr.eq(self.row_ctr + 1)
                     ]
-                    with m.If(self.row_ctr == 261):
+                    with m.If(self.row_ctr == 258):
                         m.d.sync += [
                             self.row_ctr.eq(0),
                             self.cmd_word_ctr.eq(0),
@@ -200,7 +209,7 @@ if __name__ == "__main__":
     sim = Simulator(dut)
 
     def proc():
-
+        yield out_fifo.r_en.eq(1)
         yield dut.acq.input.eq(0b00)
         for i in range(6837):
             yield
@@ -211,7 +220,7 @@ if __name__ == "__main__":
             yield dut.acq.input.eq(0b00)
             yield
 
-        for i in range(int(sim_freq * 15)):
+        for i in range(int(sim_freq * 1)):
             yield
 
 
@@ -219,6 +228,6 @@ if __name__ == "__main__":
     sim.add_clock(1/dut.sensor_clk_freq)
 
     sim.add_sync_process(proc)
-    with sim.write_vcd("main-dump.vcd", "main-dump.gtkw"):
+    with sim.write_vcd("main-dump.vcd"):
         sim.run()
 
