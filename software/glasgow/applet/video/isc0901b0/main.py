@@ -45,9 +45,9 @@ class ISC0901B0Main(Elaboratable):
         self.frame_valid = Signal()
         self.row_ctr = Signal(range(256+32), reset=0)
 
-        self.bias_value = 0x35
+        self.bias_value = 0x2a
 #        self.bias_to_latch_cyc = 3  # simultaneously with latch
-        self.bias_to_latch_cyc = 2
+        self.bias_to_latch_cyc = 1
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()

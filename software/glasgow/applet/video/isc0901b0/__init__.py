@@ -41,7 +41,7 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
 
         w = 338
         h = 259
-        num_frames = 60
+        num_frames = 10
         data = (await iface.read(w * h * num_frames * 2))
         f = open("frame.bin", "wb")
         f.write(data)
@@ -55,7 +55,8 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
         import numpy as np
         import matplotlib.pyplot as plt
         frames = np.ndarray(shape=(num_frames, h, w), dtype="<u2", buffer=data)[:, 3:, 2:]
-        img = frames[-1]
+        nuc = np.ndarray(shape=(10, h, w), dtype="<u2", buffer=open("nuc.bin", "rb").read())[:, 3:, 2:]
+        img = frames[-1] - np.mean(nuc, axis=0)
 
         bp_where = np.where(abs(img - np.mean(img)) > 5 * np.std(img))
         print("bad pixels: %d" % len(bp_where[0]))
@@ -66,7 +67,7 @@ class ISC0901B0InputApplet(GlasgowApplet, name="isc0901b0"):
 
         fig, ax = plt.subplots(1, 2, tight_layout=True)
         ax[0].imshow(img)
-        ax[1].hist(img.flatten(), bins="auto")
+        #ax[1].hist(img.flatten(), bins="auto")
 
         plt.show(True)
 

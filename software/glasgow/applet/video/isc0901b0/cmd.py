@@ -9,8 +9,9 @@ class ISC0901B0SOModule(Elaboratable):
     """
 
     done: Signal
-    def __init__(self, fifo: FIFOInterface):
+    def __init__(self, fifo: FIFOInterface, msb_first=True):
 
+        self.msb_first = msb_first
         self.fifo = fifo
         self.out = Signal()
         self.bit_ctr = Signal(range(self.fifo.width + 1), reset=0)  # bit counter
@@ -25,8 +26,11 @@ class ISC0901B0SOModule(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
         m.submodules.fifo = self.fifo
+        if self.msb_first:
+            m.d.comb += self.out.eq(self.out_word[self.fifo.width - 1])
+        else:
+            m.d.comb += self.out.eq(self.out_word[0])
 
-        m.d.comb += self.out.eq(self.out_word[self.fifo.width - 1])
         m.d.comb += self.out_clk.eq(self.clk)
         m.d.comb += self.done.eq(~(self.fifo.r_rdy | self.have_word))
         with m.If(~self.have_word):
@@ -42,8 +46,10 @@ class ISC0901B0SOModule(Elaboratable):
 
         with m.Else():
             m.d.comb += self.fifo.r_en.eq(0)
-
-            m.d.sync += self.out_word.eq(self.out_word.shift_left(1))
+            if self.msb_first:
+                m.d.sync += self.out_word.eq(self.out_word.shift_left(1))
+            else:
+                m.d.sync += self.out_word.eq(self.out_word.shift_right(1))
             m.d.sync += self.bit_ctr.eq(self.bit_ctr + 1)
             with m.If(self.bit_ctr == self.fifo.width):
                 m.d.comb += self.fifo.r_en.eq(1)
@@ -94,7 +100,7 @@ class ISC0901B0BiasModule(ISC0901B0SOModule):
     Submodule that provides BIAS output to sensor, from the given FIFO.
     """
     def __init__(self, pads, fifo):
-        super().__init__(fifo)
+        super().__init__(fifo, msb_first=False)
         self.pads = pads
 
     def elaborate(self, platform) -> Module:
@@ -156,7 +162,8 @@ if __name__ == "__main__":
             yield
             yield dut.fifo.w_en.eq(0)
 
-        yield from w(0x64)
+        yield from w(0x35)
+        yield from w(0x35)
         for i in range(32):
             yield Tick()
 

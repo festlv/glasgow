@@ -50,5 +50,6 @@ from .audio.yamaha_opx import AudioYamahaOPxApplet
 from .video.rgb_input import VideoRGBInputApplet
 from .video.vga_output import VGAOutputApplet
 from .video.ws2812_output import VideoWS2812OutputApplet
+from .video.isc0901b0 import ISC0901B0InputApplet
 
 from .radio.nrf24l01 import RadioNRF24L01Applet
